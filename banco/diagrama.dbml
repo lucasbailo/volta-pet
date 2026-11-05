@@ -1,0 +1,285 @@
+// Plataforma de Pets Desaparecidos e Doação — modelo do banco
+// Cole este conteúdo em https://dbdiagram.io para gerar o diagrama ER.
+
+Project pets {
+  database_type: 'PostgreSQL'
+  Note: 'Supabase (PostgreSQL + PostGIS). auth.users é gerenciada pelo Supabase Auth.'
+}
+
+Enum tipo_perfil {
+  pessoa
+  ong
+}
+Enum status_ong {
+  pendente
+  aprovada
+  recusada
+}
+Enum tipo_anuncio {
+  desaparecido
+  encontrado
+  doacao
+}
+Enum status_anuncio {
+  ativo
+  resolvido
+  expirado
+  oculto
+}
+Enum especie {
+  cachorro
+  gato
+  passaro
+  outro
+}
+Enum sexo_animal {
+  macho
+  femea
+  desconhecido
+}
+Enum porte_animal {
+  pequeno
+  medio
+  grande
+}
+Enum perfil_saida {
+  so_dentro_de_casa
+  sai_supervisionado
+  sai_sozinho
+  desconhecido
+}
+Enum precisao_local {
+  exato
+  aproximado
+}
+Enum motivo_denuncia {
+  golpe
+  anuncio_falso
+  conteudo_improprio
+  outro
+}
+Enum status_denuncia {
+  pendente
+  confirmada
+  descartada
+}
+
+TableGroup localizacao {
+  paises
+  estados
+  cidades
+}
+TableGroup anuncio {
+  anuncios
+  anuncio_local_privado
+  anuncio_fotos
+  avistamentos
+  irmaos
+}
+TableGroup contatos {
+  avisos_encontrei
+  pedidos_adocao
+  denuncias
+  codigos_verificacao
+  notificacoes
+}
+TableGroup configuracao {
+  zonas_busca
+  regras_expiracao
+}
+
+Table auth_users {
+  id uuid [pk]
+  email text
+  Note: 'Tabela do Supabase Auth (auth.users)'
+}
+
+Table paises {
+  id smallint [pk, increment]
+  codigo char(2) [unique, not null, note: 'ISO, ex.: BR']
+  nome text [not null]
+}
+
+Table estados {
+  id int [pk, increment]
+  pais_id smallint [not null, ref: > paises.id]
+  sigla varchar(3) [not null]
+  nome text [not null]
+  indexes { (pais_id, sigla) [unique] }
+}
+
+Table cidades {
+  id int [pk, increment]
+  estado_id int [not null, ref: > estados.id]
+  nome text [not null]
+  codigo_ibge int [unique]
+  centro geography [note: 'Point 4326']
+  indexes { (estado_id, nome) [unique] }
+}
+
+Table perfis {
+  id uuid [pk, ref: - auth_users.id]
+  tipo tipo_perfil [not null, default: 'pessoa']
+  nome text [not null]
+  cidade_id int [ref: > cidades.id]
+  foto_url text
+  instagram text
+  facebook text
+  site text
+  e_admin boolean [not null, default: false]
+  ong_cnpj varchar(14) [unique]
+  ong_descricao text
+  ong_chave_pix text
+  ong_status status_ong
+  criado_em timestamptz [not null]
+}
+
+Table anuncios {
+  id uuid [pk]
+  tipo tipo_anuncio [not null]
+  dono_id uuid [not null, ref: > perfis.id]
+  status status_anuncio [not null, default: 'ativo']
+  especie especie [not null]
+  nome text
+  raca text
+  sexo sexo_animal [not null]
+  idade_meses int
+  porte porte_animal
+  cor text
+  sinais_particulares text
+  descricao text
+  vacinado boolean [note: 'doação']
+  castrado boolean [note: 'doação']
+  vermifugado boolean [note: 'doação']
+  convive_criancas boolean
+  convive_caes boolean
+  convive_gatos boolean
+  data_evento timestamptz [note: 'quando sumiu / foi achado']
+  perfil_saida perfil_saida [note: 'desaparecido']
+  recompensa "numeric(10,2)" [note: 'desaparecido']
+  animal_comigo boolean [note: 'encontrado']
+  cidade_id int [not null, ref: > cidades.id]
+  precisao precisao_local
+  ponto_publico geography [note: 'deslocado 50–150 m se aproximado']
+  expira_em timestamptz [not null]
+  lembrete_enviado_em timestamptz
+  renovacoes int [not null, default: 0]
+  resolvido_em timestamptz
+  sinalizado boolean [not null, default: false, note: 'selo Cuidado']
+  criado_em timestamptz [not null]
+  atualizado_em timestamptz [not null]
+}
+
+Table anuncio_local_privado {
+  anuncio_id uuid [pk, ref: - anuncios.id]
+  ponto_exato geography [not null]
+  Note: 'Visível só para o dono (RN04)'
+}
+
+Table anuncio_fotos {
+  id uuid [pk]
+  anuncio_id uuid [not null, ref: > anuncios.id]
+  caminho text [not null, note: 'Supabase Storage']
+  ordem smallint [not null]
+  criado_em timestamptz [not null]
+  Note: 'Máximo de 5 fotos por anúncio'
+}
+
+Table avistamentos {
+  id uuid [pk]
+  anuncio_id uuid [not null, ref: > anuncios.id]
+  ponto geography [not null]
+  visto_em timestamptz [not null]
+  observacao text
+  criado_em timestamptz [not null]
+}
+
+Table irmaos {
+  anuncio_a uuid [not null, ref: > anuncios.id]
+  anuncio_b uuid [not null, ref: > anuncios.id]
+  indexes { (anuncio_a, anuncio_b) [pk] }
+  Note: 'Vínculo simétrico, guardado uma vez (a < b)'
+}
+
+Table avisos_encontrei {
+  id uuid [pk]
+  anuncio_id uuid [not null, ref: > anuncios.id]
+  autor_id uuid [ref: > perfis.id, note: 'null = sem conta']
+  nome text [not null]
+  email text [not null]
+  telefone text
+  ponto geography
+  visto_em timestamptz [not null]
+  animal_comigo boolean [not null]
+  foto_caminho text
+  mensagem text
+  consentimento boolean [not null, note: 'obrigatório (LGPD)']
+  email_verificado_em timestamptz
+  ip_hash text [note: 'apagado após 30 dias']
+  criado_em timestamptz [not null]
+}
+
+Table pedidos_adocao {
+  id uuid [pk]
+  anuncio_id uuid [not null, ref: > anuncios.id]
+  autor_id uuid [ref: > perfis.id]
+  nome text [not null]
+  email text [not null]
+  telefone text
+  mensagem text
+  consentimento boolean [not null]
+  criado_em timestamptz [not null]
+}
+
+Table denuncias {
+  id uuid [pk]
+  anuncio_id uuid [not null, ref: > anuncios.id]
+  autor_id uuid [ref: > perfis.id]
+  motivo motivo_denuncia [not null]
+  detalhes text
+  ip_hash text
+  status status_denuncia [not null, default: 'pendente']
+  revisado_por uuid [ref: > perfis.id]
+  revisado_em timestamptz
+  criado_em timestamptz [not null]
+}
+
+Table codigos_verificacao {
+  id uuid [pk]
+  email text [not null]
+  codigo_hash text [not null]
+  tentativas smallint [not null]
+  expira_em timestamptz [not null]
+  usado_em timestamptz
+  criado_em timestamptz [not null]
+}
+
+Table notificacoes {
+  id uuid [pk]
+  usuario_id uuid [not null, ref: > perfis.id]
+  tipo text [not null]
+  anuncio_id uuid [ref: > anuncios.id]
+  dados jsonb [not null]
+  lida_em timestamptz
+  criado_em timestamptz [not null]
+}
+
+Table zonas_busca {
+  especie especie [not null]
+  perfil_saida perfil_saida [not null]
+  interna_m int [not null]
+  interna_pct smallint [not null]
+  externa_m int [not null]
+  externa_pct smallint [not null]
+  fonte text [not null]
+  indexes { (especie, perfil_saida) [pk] }
+  Note: 'RN01 — valores dos estudos, ajustáveis sem código'
+}
+
+Table regras_expiracao {
+  tipo tipo_anuncio [pk]
+  dias_validade int [not null]
+  dias_lembrete int [not null]
+  dias_remocao int [not null]
+  Note: 'RN02'
+}

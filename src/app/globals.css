@@ -1,0 +1,174 @@
+@import "tailwindcss";
+@import "@fontsource-variable/bricolage-grotesque";
+@import "@fontsource-variable/atkinson-hyperlegible-next";
+@import "leaflet/dist/leaflet.css";
+
+/* Paleta: cartaz de "procura-se" (amarelo), achado (azul), adoção (verde), sobre papel claro. */
+@theme {
+  --color-tinta: #17232F;
+  --color-tinta-suave: #4A5866;
+  --color-papel: #EEF2F0;
+  --color-folha: #FFFFFF;
+  --color-linha: #CED8D3;
+  --color-cartaz: #FFCE1F;
+  --color-cartaz-escuro: #8A6A00;
+  --color-achado: #1F6FB8;
+  --color-achado-claro: #DCEBF8;
+  --color-adocao: #1E8758;
+  --color-adocao-claro: #D9F0E4;
+  --color-alerta: #B42318;
+  --color-alerta-claro: #FDE7E4;
+
+  --font-titulo: "Bricolage Grotesque Variable", "Segoe UI", system-ui, sans-serif;
+  --font-texto: "Atkinson Hyperlegible Next Variable", "Segoe UI", system-ui, sans-serif;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-papel);
+  color: var(--color-tinta);
+  font-family: var(--font-texto);
+  font-size: 1.0625rem;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, .titulo {
+  font-family: var(--font-titulo);
+  font-optical-sizing: auto;
+  letter-spacing: -0.015em;
+  line-height: 1.1;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-achado);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Campos de formulário */
+.campo {
+  width: 100%;
+  border: 1.5px solid var(--color-linha);
+  background: var(--color-folha);
+  border-radius: 10px;
+  padding: 0.6rem 0.75rem;
+  font: inherit;
+  color: inherit;
+}
+.campo:focus {
+  border-color: var(--color-tinta);
+  outline: none;
+}
+.campo[aria-invalid="true"] {
+  border-color: var(--color-alerta);
+}
+.rotulo {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.3rem;
+}
+.dica {
+  font-size: 0.9rem;
+  color: var(--color-tinta-suave);
+}
+.erro {
+  font-size: 0.9rem;
+  color: var(--color-alerta);
+  margin-top: 0.25rem;
+}
+
+/* Botões */
+.botao {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  padding: 0.65rem 1.2rem;
+  font-weight: 700;
+  border: 2px solid var(--color-tinta);
+  transition: transform 120ms ease, background-color 120ms ease;
+  cursor: pointer;
+}
+.botao:active {
+  transform: translateY(1px);
+}
+.botao:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.botao-cartaz { background: var(--color-cartaz); color: var(--color-tinta); }
+.botao-cartaz:hover { background: #FFD94D; }
+.botao-tinta { background: var(--color-tinta); color: #fff; }
+.botao-tinta:hover { background: #26384A; }
+.botao-achado { background: var(--color-achado); border-color: var(--color-achado); color: #fff; }
+.botao-adocao { background: var(--color-adocao); border-color: var(--color-adocao); color: #fff; }
+.botao-contorno { background: transparent; color: var(--color-tinta); }
+.botao-contorno:hover { background: var(--color-folha); }
+.botao-pequeno { padding: 0.35rem 0.85rem; font-size: 0.95rem; border-width: 1.5px; }
+
+/* Escolhas em pílula (rádios estilizados) */
+.pilula {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1.5px solid var(--color-linha);
+  background: var(--color-folha);
+  border-radius: 999px;
+  padding: 0.35rem 0.85rem;
+  cursor: pointer;
+  user-select: none;
+}
+.pilula:has(input:checked),
+.pilula[aria-current="true"] {
+  background: var(--color-tinta);
+  border-color: var(--color-tinta);
+  color: #fff;
+}
+.pilula:has(input:focus-visible) {
+  outline: 3px solid var(--color-achado);
+  outline-offset: 2px;
+}
+.pilula input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Diálogos */
+dialog.modal {
+  width: min(560px, calc(100vw - 1.5rem));
+  max-height: calc(100dvh - 2rem);
+  border: none;
+  border-radius: 18px;
+  padding: 0;
+  background: var(--color-folha);
+  color: var(--color-tinta);
+  box-shadow: 0 30px 80px -20px rgb(23 35 47 / 0.45);
+}
+dialog.modal::backdrop {
+  background: rgb(23 35 47 / 0.55);
+}
+dialog.modal[open] {
+  animation: abrir 160ms ease-out;
+}
+@keyframes abrir {
+  from { opacity: 0; transform: translateY(12px); }
+}
+
+/* Leaflet dentro do layout */
+.leaflet-container {
+  font: inherit;
+  z-index: 0;
+}
