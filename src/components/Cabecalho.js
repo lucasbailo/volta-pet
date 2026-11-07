@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { MARCA } from "@/lib/marca";
-import { obterUsuarioAtual, contarNaoLidas, contarPendenciasModeracao } from "@/lib/dados";
-import { acaoAlternarModoLocal } from "@/app/acoes";
+import { MODO, obterUsuarioAtual, contarNaoLidas, contarPendenciasModeracao } from "@/lib/dados";
+import { acaoAlternarModoLocal, acaoSair } from "@/app/acoes";
 
 const LINKS = [
   ["/desaparecidos", "Desaparecidos"],
@@ -70,12 +70,20 @@ async function AreaUsuario() {
           )}
         </Link>
       ) : null}
-      {/* Só existe no modo local: alterna entre Ana (admin), a ONG de exemplo e um visitante sem conta. */}
-      <form action={acaoAlternarModoLocal}>
-        <button type="submit" className="rounded-full border border-dashed border-tinta/40 px-3 py-1 text-xs text-tinta-suave hover:border-tinta" title="Clique para trocar de perfil: Ana, ONG ou visitante sem conta">
-          {usuario ? `Modo local: ${usuario.tipo === "ong" ? usuario.nome : usuario.nome.split(" ")[0]}` : "Modo local: visitante"}
-        </button>
-      </form>
+      {MODO === "local" ? (
+        // Só no modo local: alterna entre Ana (admin), a ONG de exemplo e um visitante sem conta.
+        <form action={acaoAlternarModoLocal}>
+          <button type="submit" className="rounded-full border border-dashed border-tinta/40 px-3 py-1 text-xs text-tinta-suave hover:border-tinta" title="Clique para trocar de perfil: Ana, ONG ou visitante sem conta">
+            {usuario ? `Modo local: ${usuario.tipo === "ong" ? usuario.nome : usuario.nome.split(" ")[0]}` : "Modo local: visitante"}
+          </button>
+        </form>
+      ) : usuario ? (
+        <form action={acaoSair}>
+          <button type="submit" className="rounded-full px-3 py-1.5 font-semibold text-tinta-suave hover:bg-folha hover:text-tinta">Sair</button>
+        </form>
+      ) : (
+        <Link href="/entrar" className="rounded-full px-3 py-1.5 font-semibold hover:bg-folha">Entrar</Link>
+      )}
     </>
   );
 }

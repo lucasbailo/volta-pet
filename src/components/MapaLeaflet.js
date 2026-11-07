@@ -1,7 +1,7 @@
 "use client";
 
 // Mapas com Leaflet + OpenStreetMap (carregados só no navegador).
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import L from "leaflet";
 import { MapContainer, TileLayer, Circle, CircleMarker, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import { RAIO_APROXIMACAO_M } from "@/lib/geo";
@@ -10,6 +10,22 @@ import { dataHora } from "@/lib/formatacao";
 const TINTA = "#17232F";
 const CARTAZ = "#FFCE1F";
 const ACHADO = "#1F6FB8";
+
+// O Next 16 (Cache Components) guarda a página anterior escondida e a reativa ao voltar.
+// Nesse vaivém o react-leaflet destrói o mapa, mas continua usando a referência antiga, e as
+// camadas quebram. Por isso o mapa só existe enquanto o componente está ativo, e cada
+// reativação cria um mapa novo (key diferente = elemento e instância do Leaflet novos).
+function MapaAtivo({ children, ...props }) {
+  const [versao, setVersao] = useState(0);
+  useEffect(() => {
+    // Intencional: o efeito marca cada ativação; não há outro aviso do React para "a página voltou".
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setVersao((v) => v + 1);
+    return () => setVersao(0);
+  }, []);
+  if (!versao) return <div className="h-full w-full bg-papel" />;
+  return <MapContainer key={versao} {...props}>{children}</MapContainer>;
+}
 
 function Camadas() {
   return (
@@ -33,7 +49,7 @@ export function MapaAnuncio({ pontoPublico, precisao, zonas, avistamentos = [], 
   const centro = zonas?.centro ?? pontoPublico;
   const raio = zonas?.externa_m ?? 600;
   return (
-    <MapContainer center={[centro.lat, centro.lng]} zoom={15} scrollWheelZoom={false} className="h-full w-full">
+    <MapaAtivo center={[centro.lat, centro.lng]} zoom={15} scrollWheelZoom={false} className="h-full w-full">
       <Camadas />
       <Enquadrar centro={centro} raio={Math.max(raio, 250)} />
       {zonas && (
@@ -66,7 +82,7 @@ export function MapaAnuncio({ pontoPublico, precisao, zonas, avistamentos = [], 
           <Tooltip>Visto em {dataHora(v.visto_em)}{v.observacao ? `: ${v.observacao}` : ""}</Tooltip>
         </CircleMarker>
       ))}
-    </MapContainer>
+    </MapaAtivo>
   );
 }
 
@@ -86,13 +102,13 @@ function Seguir({ ponto }) {
 // Seletor de ponto: clique no mapa para marcar.
 export function SeletorMapa({ inicial, ponto, aoEscolher, centralizarEm }) {
   return (
-    <MapContainer center={[inicial.lat, inicial.lng]} zoom={inicial.zoom ?? 13} className="h-full w-full">
+    <MapaAtivo center={[inicial.lat, inicial.lng]} zoom={inicial.zoom ?? 13} className="h-full w-full">
       <Camadas />
       <Clique aoEscolher={aoEscolher} />
       <Seguir ponto={centralizarEm} />
       {ponto && (
         <CircleMarker center={[ponto.lat, ponto.lng]} radius={10} pathOptions={{ color: TINTA, weight: 3, fillColor: CARTAZ, fillOpacity: 1 }} />
       )}
-    </MapContainer>
+    </MapaAtivo>
   );
 }

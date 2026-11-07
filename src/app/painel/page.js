@@ -41,7 +41,13 @@ function textoNovidade({ tipo, anuncio_nome: nome }) {
 async function Conteudo() {
   await connection();
   const usuario = await obterUsuarioAtual();
-  if (!usuario) return <p className="mt-6 text-lg">Entre na sua conta para ver seus anúncios.</p>;
+  if (!usuario) {
+    return (
+      <p className="mt-6 text-lg">
+        <Link href="/entrar?proximo=/painel" className="font-semibold underline underline-offset-4">Entre na sua conta</Link> para ver seus anúncios.
+      </p>
+    );
+  }
   const { anuncios, avisos, pedidos, naoLidas, novidades } = await painelDoUsuario(usuario.id);
 
   async function marcarLidas() {

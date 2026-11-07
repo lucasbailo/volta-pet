@@ -11,6 +11,7 @@ import * as dados from "@/lib/dados";
 import { coordenadaValida } from "@/lib/geo";
 import { ESPECIES, LIMITE_FOTOS, ROTULOS } from "@/lib/regras";
 import { TAMANHO_MAXIMO_FOTO, TIPOS_FOTO } from "@/lib/fotos";
+import { emailCodigo, enviarEmail } from "@/lib/email";
 
 // ---------------------------------------------------------------------------
 // Utilitários de validação
@@ -70,9 +71,10 @@ function erroDeFoto(f) {
   return null;
 }
 
-async function salvarArquivoDeFoto(f) {
+// salvar: dados.salvarFoto (fotos públicas do anúncio) ou dados.salvarFotoAviso (privadas, só o dono vê).
+async function salvarArquivoDeFoto(f, salvar = dados.salvarFoto) {
   const ext = f.type === "image/png" ? "png" : f.type === "image/jpeg" ? "jpg" : "webp";
-  return dados.salvarFoto(Buffer.from(await f.arrayBuffer()), ext);
+  return salvar(Buffer.from(await f.arrayBuffer()), ext);
 }
 
 async function ipHash() {
@@ -239,9 +241,15 @@ export async function acaoMarcarNotificacoesLidas() {
 // ---------------------------------------------------------------------------
 export async function acaoEnviarCodigo(email) {
   if (!emailValido(email)) return { erro: "Digite um e-mail válido." };
-  const codigo = await dados.criarCodigoVerificacao(String(email));
-  // TODO (Supabase): enviar o código por e-mail. Em modo local ele aparece na tela.
-  console.log(`[modo local] código de verificação para ${email}: ${codigo}`);
+  let codigo;
+  try {
+    codigo = await dados.criarCodigoVerificacao(String(email));
+  } catch (e) {
+    return { erro: e.message };
+  }
+  const enviado = await enviarEmail({ para: String(email), ...emailCodigo(codigo) });
+  if (!enviado && process.env.NODE_ENV === "production") return { erro: "Não conseguimos enviar o e-mail agora. Tente de novo em alguns minutos." };
+  // Fora de produção o código também aparece na tela, para testar sem abrir o e-mail.
   return { ok: true, codigoLocal: process.env.NODE_ENV !== "production" ? codigo : undefined };
 }
 
@@ -271,15 +279,15 @@ export async function acaoEnviarAviso(_estado, fd) {
   if (Object.keys(erros).length) return { erros, valores: valores() };
 
   // A foto é gravada antes do registro; se o aviso for recusado (RN07, código), ela é apagada.
-  if (arquivo) aviso.foto = await salvarArquivoDeFoto(arquivo);
+  if (arquivo) aviso.foto = await salvarArquivoDeFoto(arquivo, dados.salvarFotoAviso);
   try {
     const r = await dados.registrarAvisoEncontrei(aviso, { usuarioId: usuario?.id ?? null, ipHash: await ipHash(), codigo });
     if (!r.ok) {
-      await dados.apagarFoto(aviso.foto);
+      await dados.apagarFotoAviso(aviso.foto);
       return { erros: { [r.campo ?? "geral"]: r.erro }, exigeConta: r.exigeConta, valores: valores() };
     }
   } catch (e) {
-    await dados.apagarFoto(aviso.foto);
+    await dados.apagarFotoAviso(aviso.foto);
     return { erros: { geral: e.message } };
   }
   revalidatePath("/", "layout");
@@ -353,4 +361,100 @@ export async function acaoDenunciar(_estado, fd) {
   }
   revalidatePath("/", "layout");
   return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Contas: cadastro, login e senha  [RF01, RF02, RF03]
+// ---------------------------------------------------------------------------
+// Depois de entrar, volta para a página de origem. Só aceita caminhos do próprio site.
+function destinoSeguro(valor, padrao = "/painel") {
+  const v = String(valor ?? "");
+  return v.startsWith("/") && !v.startsWith("//") && !v.startsWith("/\\") ? v : padrao;
+}
+
+// CNPJ com dígitos verificadores (algoritmo da Receita Federal).
+function cnpjValido(cnpj) {
+  if (!/^\d{14}$/.test(cnpj) || /^(\d)\1{13}$/.test(cnpj)) return false;
+  const digito = (base) => {
+    const pesos = base.length === 12 ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    const resto = [...base].reduce((soma, n, i) => soma + Number(n) * pesos[i], 0) % 11;
+    return resto < 2 ? 0 : 11 - resto;
+  };
+  const d1 = digito(cnpj.slice(0, 12));
+  return d1 === Number(cnpj[12]) && digito(cnpj.slice(0, 12) + d1) === Number(cnpj[13]);
+}
+
+const SENHA_MINIMA = 8; // RNF02: a senha em si fica só no Supabase Auth, com hash
+
+export async function acaoEntrar(_estado, fd) {
+  const email = String(fd.get("email") ?? "").trim();
+  const senha = String(fd.get("senha") ?? "");
+  const erros = {};
+  if (!emailValido(email)) erros.email = "Digite o seu e-mail.";
+  if (!senha) erros.senha = "Digite a sua senha.";
+  if (Object.keys(erros).length) return { erros, email };
+  const r = await dados.entrar(email, senha);
+  if (!r.ok) return { erros: { geral: r.erro }, email };
+  revalidatePath("/", "layout");
+  redirect(destinoSeguro(fd.get("proximo")));
+}
+
+export async function acaoSair() {
+  await dados.sair();
+  revalidatePath("/", "layout");
+  redirect("/");
+}
+
+export async function acaoCadastrar(_estado, fd) {
+  const erros = {};
+  const tipo = opcao(fd, "tipo", ["pessoa", "ong"]) ?? "pessoa";
+  const conta = {
+    tipo,
+    nome: texto(fd, "nome", { max: 100, obrigatorio: true, rotulo: tipo === "ong" ? "o nome da ONG" : "seu nome" }, erros),
+    email: texto(fd, "email", { max: 200, obrigatorio: true, rotulo: "seu e-mail" }, erros),
+    telefone: texto(fd, "telefone", { max: 20, rotulo: "o telefone" }, erros),
+    cidadeId: Number(fd.get("cidade_id")) || null,
+    instagram: texto(fd, "instagram", { max: 60, rotulo: "o Instagram" }, erros)?.replace(/^@/, "") ?? null,
+    facebook: texto(fd, "facebook", { max: 100, rotulo: "o Facebook" }, erros),
+    site: texto(fd, "site", { max: 200, rotulo: "o site" }, erros),
+    senha: String(fd.get("senha") ?? ""),
+  };
+  if (conta.email && !emailValido(conta.email)) erros.email = "Digite um e-mail válido.";
+  if (conta.senha.length < SENHA_MINIMA) erros.senha = `A senha precisa ter pelo menos ${SENHA_MINIMA} caracteres.`;
+  if (!conta.cidadeId || !dados.obterCidade(conta.cidadeId)) erros.cidade_id = "Escolha o estado e a cidade.";
+  if (conta.site && !/^https?:\/\/\S+\.\S+/.test(conta.site)) erros.site = "O site precisa começar com https://";
+  if (tipo === "ong") {
+    conta.cnpj = String(fd.get("cnpj") ?? "").replace(/\D/g, "");
+    if (!cnpjValido(conta.cnpj)) erros.cnpj = "Digite um CNPJ válido, com 14 números.";
+    conta.descricao = texto(fd, "descricao", { max: 2000, obrigatorio: true, rotulo: "a descrição da ONG" }, erros);
+    conta.chavePix = texto(fd, "chave_pix", { max: 100, rotulo: "a chave PIX" }, erros);
+  }
+  if (fd.get("aceite") !== "on") erros.aceite = "Para criar a conta, aceite a política de privacidade.";
+  const valores = Object.fromEntries([...fd].filter(([chave]) => chave !== "senha"));
+  if (Object.keys(erros).length) return { erros, valores };
+
+  const r = await dados.cadastrar(conta);
+  if (!r.ok) return { erros: { [r.campo ?? "geral"]: r.erro }, valores };
+  if (!r.confirmarEmail) {
+    revalidatePath("/", "layout");
+    redirect("/painel");
+  }
+  return { ok: true, email: conta.email };
+}
+
+export async function acaoRecuperarSenha(_estado, fd) {
+  const email = String(fd.get("email") ?? "").trim();
+  if (!emailValido(email)) return { erros: { email: "Digite o e-mail da sua conta." } };
+  const r = await dados.enviarLinkNovaSenha(email);
+  return r.ok ? { ok: true } : { erros: { geral: r.erro } };
+}
+
+export async function acaoNovaSenha(_estado, fd) {
+  const senha = String(fd.get("senha") ?? "");
+  if (senha.length < SENHA_MINIMA) return { erros: { senha: `A senha precisa ter pelo menos ${SENHA_MINIMA} caracteres.` } };
+  if (senha !== String(fd.get("confirmacao") ?? "")) return { erros: { confirmacao: "As duas senhas precisam ser iguais." } };
+  const r = await dados.definirNovaSenha(senha);
+  if (!r.ok) return { erros: { geral: r.erro } };
+  revalidatePath("/", "layout");
+  redirect("/painel");
 }

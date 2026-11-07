@@ -11,6 +11,7 @@ import { gerarExemplos } from "./exemplos";
 import { distanciaMetros, pontoAproximado } from "../geo";
 import { REGRAS_EXPIRACAO, JANELA_AVISO_ANONIMO_DIAS, LIMITE_FOTOS, zonasPara } from "../regras";
 
+export const MODO = "local";
 const PASTA = path.join(process.cwd(), ".dados-locais");
 const ARQUIVO = path.join(PASTA, "banco.json");
 const PASTA_FOTOS = path.join(PASTA, "fotos");
@@ -446,9 +447,12 @@ export async function desvincularIrmaos(idA, idB, usuarioId) {
 const hashCodigo = (codigo) => crypto.createHash("sha256").update(String(codigo)).digest("hex");
 
 // RN07: gera código de 6 dígitos. No modo local o código é devolvido para aparecer na tela.
+// Limite de 3 pedidos por e-mail por hora, para ninguém usar o site para encher a caixa de outra pessoa.
 export async function criarCodigoVerificacao(email) {
   const codigo = String(crypto.randomInt(0, 1000000)).padStart(6, "0");
   await alterar((banco) => {
+    const recentes = banco.codigos_verificacao.filter((c) => c.email === email.toLowerCase() && Date.now() - new Date(c.criado_em).getTime() < 3600000);
+    if (recentes.length >= 3) throw new Error("Você já pediu 3 códigos na última hora. Use o último que chegou ou tente mais tarde.");
     banco.codigos_verificacao = banco.codigos_verificacao.filter((c) => Date.now() - new Date(c.criado_em).getTime() < DIA);
     banco.codigos_verificacao.push({
       id: novoId(), email: email.toLowerCase(), codigo_hash: hashCodigo(codigo), tentativas: 0,
@@ -700,6 +704,21 @@ export async function apagarFoto(url) {
   if (!NOME_FOTO.test(nome)) return;
   await fs.rm(path.join(PASTA_FOTOS, nome), { force: true });
 }
+
+// No Supabase, fotos de aviso vão para um bucket privado; no modo local ficam na mesma pasta.
+export const salvarFotoAviso = salvarFoto;
+export const apagarFotoAviso = apagarFoto;
+
+// ---------------------------------------------------------------------------
+// Contas: só existem com o Supabase Auth. No modo local, use o botão "Modo local".
+// ---------------------------------------------------------------------------
+const SEM_CONTAS = { ok: false, erro: "Cadastro e login funcionam quando o site está conectado ao Supabase. No modo local, use o botão no topo." };
+export async function cadastrar() { return SEM_CONTAS; }
+export async function entrar() { return SEM_CONTAS; }
+export async function sair() {}
+export async function enviarLinkNovaSenha() { return SEM_CONTAS; }
+export async function definirNovaSenha() { return SEM_CONTAS; }
+export async function confirmarSessao() { return false; }
 
 export async function lerFoto(nome) {
   if (!NOME_FOTO.test(nome)) return null;

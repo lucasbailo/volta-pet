@@ -6,11 +6,15 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "exemplos:criar": "node --env-file=.env.local banco/exemplos/exemplos.mjs criar",
+    "exemplos:apagar": "node --env-file=.env.local banco/exemplos/exemplos.mjs apagar"
   },
   "dependencies": {
     "@fontsource-variable/atkinson-hyperlegible-next": "^5.3.0",
     "@fontsource-variable/bricolage-grotesque": "^5.3.0",
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.119.0",
     "leaflet": "^1.9.4",
     "next": "16.4.4",
     "react": "19.3.0",

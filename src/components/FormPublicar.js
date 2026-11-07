@@ -7,7 +7,8 @@ import { SeletorLocal } from "./Mapa";
 import { Distancia } from "./Unidade";
 import FotoAnimal from "./FotoAnimal";
 import { textoFaixa, titulo } from "./CardAnuncio";
-import { acaoBuscarParecidos, acaoListarCidades, acaoPublicarAnuncio } from "@/app/acoes";
+import { useCidadesDoEstado } from "./useCidadesDoEstado";
+import { acaoBuscarParecidos, acaoPublicarAnuncio } from "@/app/acoes";
 import { ESPECIES, EMOJI_ESPECIE, LIMITE_FOTOS, ROTULOS, zonasPara } from "@/lib/regras";
 import { comprimirFoto } from "@/lib/fotos";
 
@@ -22,8 +23,7 @@ export default function FormPublicar({ tipoInicial, estados }) {
   const [tipo, setTipo] = useState(tipoInicial);
   const [especie, setEspecie] = useState("");
   const [perfil, setPerfil] = useState("");
-  const [uf, setUf] = useState("");
-  const [cidades, setCidades] = useState([]);
+  const { refUf, uf, cidades, trocarUf: carregarCidades } = useCidadesDoEstado();
   const [cidadeId, setCidadeId] = useState("");
   const [ponto, setPonto] = useState(null);
   const [centro, setCentro] = useState({ lat: -15.78, lng: -47.93, zoom: 4 });
@@ -53,10 +53,9 @@ export default function FormPublicar({ tipoInicial, estados }) {
   }, [chaveBusca]); // eslint-disable-line react-hooks/exhaustive-deps
   const listaParecidos = chaveBusca && parecidos.chave === chaveBusca ? parecidos.itens : [];
 
-  async function trocarUf(novaUf) {
-    setUf(novaUf);
+  function trocarUf(novaUf) {
     setCidadeId("");
-    setCidades(novaUf ? await acaoListarCidades(novaUf) : []);
+    carregarCidades(novaUf);
   }
 
   function trocarCidade(id) {
@@ -255,7 +254,7 @@ export default function FormPublicar({ tipoInicial, estados }) {
         </h2>
         <div className="flex flex-wrap gap-4">
           <Campo id="uf" rotulo="Estado">
-            <select id="uf" className="campo w-48" value={uf} onChange={(ev) => trocarUf(ev.target.value)}>
+            <select id="uf" ref={refUf} className="campo w-48" value={uf} onChange={(ev) => trocarUf(ev.target.value)}>
               <option value="">Escolha</option>
               {estados.map((x) => <option key={x.sigla} value={x.sigla}>{x.nome}</option>)}
             </select>
