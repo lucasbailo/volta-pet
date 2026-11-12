@@ -1,4 +1,4 @@
-# VoltaPet (nome provisório)
+# VoltaPet
 
 Site de animais desaparecidos, encontrados e para adoção — Projeto Integrador.
 Next.js 16 + Tailwind + Leaflet/OpenStreetMap.
